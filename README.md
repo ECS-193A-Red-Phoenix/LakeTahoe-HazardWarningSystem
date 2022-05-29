@@ -18,24 +18,25 @@ Table of Contents
 4. [Known errors](#known-errors)
 5. [Technical details](#technical-details)
 
-## Installation
-
-Begin by cloning this repository with
-
-`git clone https://github.com/ECS-193A-Red-Phoenix/LakeTahoe-HazardWarningSystem.git`
-
-Install Python 3. Any `3.x` version should be fine, but we use Python 3.8.8.
-
-Make sure you install required python packages with
-
-`pip install -r requirements.txt`
-
+## Installation on EC2 instance
 ### Configuring an EC2 instance
-1. Create an EC2 instance. This is meant to be persistent.
-2. Run `aws configure` and add your AWS account credentials in order for our code to shutdown the EC2 instance.
+1. Create an EC2 instance. This is meant to be persistent, so do not terminate the instance!
+2. Run `aws configure` and add your AWS account credentials. Our code uses the `aws` command line tool to shutdown the EC2 instance.
+
+### Prerequisites
+Install these packages in the EC2 instance if they don't already exist:
+- Python 3 (any 3.x version should work, but we use 3.8.10 in our EC2 instance)
+- Pip
+
+### Setting up repository
+1. Begin by cloning this repository with:
+`git clone https://github.com/ECS-193A-Red-Phoenix/LakeTahoe-HazardWarningSystem.git`
+2. Install the dependencies using:
+`pip install -r requirements.txt`
+3. Copy `drs.service` into the `/etc/systemd/system` folder. This config file tells the system to start the data retrieval service when the instance boots up.
+`sudo cp drs.service /etc/systemd/system``
 
 ## Running the model
-
 To start the si3d workflow, run the following:
 
 `python3 si3d.py`
@@ -45,7 +46,7 @@ Running this command will complete the following steps:
 1. Retrieve data, clean it, and prepare model input files located in `model/psi3d`. In particular, we update `surfbc.txt`, `si3d_inp.txt`, and `si3d_init.txt`. These input files are all located within the `model/psi3d`.
 2. Run the si3d executable `model/psi3d/psi3d`
 3. Parse the model output file `model/psi3d/plane_2` and generate `.npy` files for each temperature and flow visualization in `outputs`
-4. Upload the `.npy` files to S3 and update `contents.json`, deleting old `.npy` files if any.
+4. Upload the `.npy` files to S3 and update `contents.json`, deleting old `.npy` files in our S3 bucket and locally if any.
 5. Shutdown the EC2 instance.
 
 ## Updating this repository
@@ -72,7 +73,22 @@ This section will describe some of the methodology and organization of our code.
 
 ### What is surfbc.txt and how is it automatically updated?
 
-One of crucial si3d input files is `surfbc.txt`. The first 6 lines of this file are informational headers that are ignored by si3d when it is parsed. The 7th line describes how many data points are listed below. The rest of the file consists of 10 columns of data that the model uses to simulate the lake. The columns are 10 characters long, right aligned, and each is separated with space character. The 10 columns represent the following: time, attenuation coefficient, shortwave, air temp, atmospheric pressure, relative humidity, longwave, wind drag coefficient, wind u  wind v. The attenuation coefficient and wind drag coefficients are predefined constants. To create the surfbc.txt file, we must retrieve past and future data for each of these variables and concatenate the two. Typically, we retrieve data starting from one week from the present date and ending for as far as the forecasts go (typically up to a week in the future).
+One of crucial si3d input files is `surfbc.txt`. This is the layout of the file:
+- The first 6 lines of this file are informational headers that are ignored by si3d when it is parsed.
+- The 7th line describes how many data points are listed below.
+- The rest of the file consists of 10 columns of data that the model uses to simulate the lake. The columns are 10 characters long, right aligned, and each is separated with space character. The 10 columns represent the following:
+    - time
+    - attenuation coefficient
+    - shortwave
+    - air temp
+    - atmospheric pressure
+    - relative humidity
+    - longwave
+    - wind drag coefficient
+    - wind u
+    - wind v
+
+The attenuation coefficient and wind drag coefficients are predefined constants. To create the `surfbc.txt` file, we must retrieve past and future data for each of these variables and concatenate the two. Typically, we retrieve data starting from one week from the present date and ending for as far as the forecasts go (typically up to a week in the future).
 
 To retrieve past data, we collect JSON samples from USCG and NASA Buoy API's. This data is processed into a dataframe and cleaned using different statistical techniques to eliminate noise. The code for this is located in `get_model_historical_data` in `dataretrieval/aws.py`.
 
